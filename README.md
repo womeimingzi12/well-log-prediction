@@ -81,8 +81,8 @@ submission_code/
 │   ├── model.pkl        # 三个目标的 LightGBM 模型（训练后生成）
 │   └── scaler.pkl       # 特征插补 + 标准化管线（训练后生成）
 └── examples/
-    ├── result_example.json          # 官方结果格式样例（logId/depth）
-    └── result_example_webpage.json  # 网页提交规范样例（igoId/DEPTH）
+     └──result_example.json          # 官方结果格式样例（logId/depth）
+    
 ```
 
 ## 6. 复现说明
@@ -94,7 +94,27 @@ submission_code/
 
 ## 7. 结果 JSON 格式说明（重要）
 
-提交以**网页提交规范**为准，`config.yaml → result.format` 已设为 `webpage`（`igoId` / `DEPTH` 口径）。数据包内《测试数据返回结果格式.json》的 `logId`/`depth` 口径也已实现，如需切换改回 `official` 即可。
+提交格式为{
+  "resultData": [
+    {
+      "logId": "39dc13c9ca1e4f0eb5f9cb311fe564c3",
+      "predictions": [
+        {
+          "DEPTH": 505.0,
+          "POR": 0.1,
+          "PERM": 12.35,
+          "SW": 0.426
+        },
+        {
+          "DEPTH": 505.1,
+          "POR": 0.102,
+          "PERM": 13.02,
+          "SW": 0.431
+        }
+      ]
+    }
+  ]
+}
 
 | 口径 | 顶层字段 | 井次键 | 深度键 |
 |---|---|---|---|
