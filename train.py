@@ -113,7 +113,7 @@ def main():
 
     def _clean(t: str, arr) -> np.ndarray:
         lo, hi = trange[f"{t.lower()}_range"]
-        v = np.asarray(arr, dtype=float)
+        v = np.array(arr, dtype=float, copy=True)  # 显式拷贝，兼容 pandas 3.x 只读视图
         v[(v < lo) | (v > hi)] = np.nan
         return v
 
