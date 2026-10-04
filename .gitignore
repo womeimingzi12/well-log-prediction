@@ -1,0 +1,11 @@
+# 数据与训练产物（不纳入版本管理；提交打包时需把训练生成的权重放回 models/）
+data/
+models/*.pkl
+result*.json
+!examples/result_example.json
+cv_report.json
+
+# Python 运行缓存
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/

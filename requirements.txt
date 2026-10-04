@@ -1,0 +1,9 @@
+# Python 3.10+（开发验证环境：Python 3.13，Windows x64，CPU）
+# 全部依赖及对应版本（复现请按此清单安装）
+numpy==2.5.3
+pandas==3.0.6
+scipy==1.18.1
+scikit-learn==1.9.1
+lightgbm==4.7.0
+PyYAML==6.0.3
+joblib==1.6.0
