@@ -44,11 +44,11 @@ predict_clamp:                   # 预测值物理裁剪（与目标同单位）
   perm_upper: 5000.0             # PERM 上限（mD）
 
 result:
-  # 结果 JSON 口径：
+  # 结果 JSON 口径（已按网页提交规范设定）：
+  #   webpage  = 提交规范网页示例（无顶层附加字段，井次键 igoId，深度键 DEPTH）
   #   official = 数据包内《测试数据返回结果格式.json》
   #              （顶层 modelId/modelName/version，井次键 logId，深度键 depth）
-  #   webpage  = 提交规范网页示例（无顶层附加字段，井次键 igoId，深度键 DEPTH）
-  format: official
+  format: webpage
   model_id: ""
   model_name: LightGBM-WellLog
   version: "1.0"

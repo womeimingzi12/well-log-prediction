@@ -94,14 +94,14 @@ submission_code/
 
 ## 7. 结果 JSON 格式说明（重要）
 
-**数据包内《测试数据返回结果格式.json》与提交规范网页示例的键名不一致**，两种口径均已实现，由 `config.yaml → result.format` 切换：
+提交以**网页提交规范**为准，`config.yaml → result.format` 已设为 `webpage`（`igoId` / `DEPTH` 口径）。数据包内《测试数据返回结果格式.json》的 `logId`/`depth` 口径也已实现，如需切换改回 `official` 即可。
 
 | 口径 | 顶层字段 | 井次键 | 深度键 |
 |---|---|---|---|
-| `official`（默认，跟随数据包官方文件） | modelId / modelName / version / resultData | `logId` | `depth` |
-| `webpage`（提交规范网页示例） | resultData | `igoId` | `DEPTH` |
+| `webpage`（默认，跟随网页提交规范） | resultData | `igoId` | `DEPTH` |
+| `official`（数据包官方文件示例） | modelId / modelName / version / resultData | `logId` | `depth` |
 
-`igoId` / `logId` 取井文件名（不含 .txt 扩展名）。如平台校验要求网页口径，把 `config.yaml` 中 `result.format` 改为 `webpage` 即可。
+`igoId` / `logId` 取井文件名（不含 .txt 扩展名）。默认输出格式为 `webpage`，无需额外配置。
 
 ## 8. 训练与提交流程
 
