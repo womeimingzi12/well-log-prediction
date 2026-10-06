@@ -94,7 +94,11 @@ submission_code/
 
 ## 7. 结果 JSON 格式说明（重要）
 
-提交格式为{
+提交格式为
+> 以下为模型输出的 JSON 结构，`resultData` 包含一口井的预测结果，
+> `predictions` 中每个对象代表一个深度点的预测值。
+```
+{
   "resultData": [
     {
       "logId": "39dc13c9ca1e4f0eb5f9cb311fe564c3",
@@ -115,7 +119,7 @@ submission_code/
     }
   ]
 }
-
+```
 | 口径 | 顶层字段 | 井次键 | 深度键 |
 |---|---|---|---|
 | `webpage`（默认，跟随网页提交规范） | resultData | `igoId` | `DEPTH` |
