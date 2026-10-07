@@ -13,6 +13,10 @@ INPUT_CURVES = ["DEPTH", "DEVI", "AZIM", "GR", "SP", "AC", "DEN", "CNL",
                 "PE", "RXO", "RT", "CAL", "BIT", "CASE"]
 TARGETS = ["POR", "PERM", "SW"]
 
+# 训练标签中的"地板值"（非储层声明值）：约 68% 深度点三目标同时取该值。
+# 两段式模型（地板分类 + 储层回归）的标签掩码与推理覆盖逻辑使用。
+FLOOR = {"POR": 0.1, "PERM": 0.01, "SW": 99.9}
+
 # 参与滚动统计 / 井内归一化的主要曲线（不含井身常量 BIT/CASE 与角度类）
 KEY_CURVES = ["GR", "SP", "AC", "DEN", "CNL", "PE", "RXO", "RT", "CAL"]
 
@@ -69,6 +73,19 @@ def build_features(df: pd.DataFrame, rolling_windows=(5, 20),
     feat["PHI_DEN_AC"] = np.sqrt(phi_d * phi_a)                 # 声密组合孔隙度
     feat["LOG_RT_RXO"] = feat["LOG10_RT"] - feat["LOG10_RXO"]   # 泥浆侵入程度
     feat["DEN_CNL_CROSS"] = den * cnl
+
+    # ---- 3b. 泥质含量指示（GR 井内 P5/P95 归一化 + Larionov 校正）----
+    gr_v = df["GR"].to_numpy(dtype=float)
+    if np.isfinite(gr_v).any():
+        gr_lo, gr_hi = np.nanpercentile(gr_v, 5.0), np.nanpercentile(gr_v, 95.0)
+    else:
+        gr_lo = gr_hi = np.nan
+    if np.isfinite(gr_lo) and np.isfinite(gr_hi) and gr_hi > gr_lo:
+        igr = np.clip((gr_v - gr_lo) / (gr_hi - gr_lo), 0.0, 1.0)
+    else:
+        igr = np.full_like(gr_v, np.nan)
+    feat["IGR_GR"] = igr
+    feat["VSH_GR"] = 0.083 * (np.power(2.0, 3.7 * igr) - 1.0)   # Larionov(第三纪)
 
     # ---- 4. 井斜 / 方位角（圆变量编码）----
     azim = np.deg2rad(df["AZIM"].to_numpy(dtype=float))
