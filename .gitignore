@@ -5,7 +5,14 @@ result*.json
 !examples/result_example.json
 cv_report.json
 
+# 训练日志
+train_run.log
+train_run.err
+
 # Python 运行缓存
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+
+# 虚拟环境
+.venv/

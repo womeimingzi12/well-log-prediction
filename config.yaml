@@ -6,10 +6,10 @@ data:
   train_dir: ./data/train        # 训练井 txt 目录
   test_dir: ./data/test          # 测试井 txt 目录
   encoding: utf-8                # 首选编码（utf-8-sig / gbk 自动兜底）
-  missing_sentinels: [-99999, -999.25, -9999, -999]   # 缺失哨兵值，读入后置为 NaN
+  missing_sentinels: [-99999, -999.25, -9999, -999]   # 缺失哨兵值（实测 -99999 / -9999，余为防御性补充），读入后置为 NaN；依据见 README 第 9 节
 
 features:
-  rolling_windows: [5, 20]       # 滚动统计窗口半径（采样点数；0.1 m/点 → ±0.5 m / ±2 m）
+  rolling_windows: [5, 20]       # 滚动统计窗口半径（采样点数；0.1 m/点 → ±0.5 m / ±2 m；多尺度响应经验设定，依据见 README 第 9 节）
   max_depth_gap: 1.0             # 深度断层阈值（m）：相邻采样点深度差超过该值视为不同井段
 
 model:
@@ -17,7 +17,7 @@ model:
   num_threads: 4                 # LightGBM 线程数（复现时须与提交环境保持一致）
   num_boost_round: 3000          # 最大迭代轮数（实际轮数由早停 / CV 中位数决定）
   early_stopping_rounds: 200
-  lgb_params:                    # LightGBM 超参数（三个目标共用）
+  lgb_params:                    # LightGBM 超参数（三目标分类器/回归器共用；基线经验配置，初版设定；依据见 README 第 9 节）
     learning_rate: 0.05
     num_leaves: 63
     max_depth: -1
@@ -31,13 +31,13 @@ model:
 train:
   n_folds: 5                     # 按井分组的交叉验证折数
 
-targets:                         # 目标物理范围（范围外视为脏值，不参与训练）
+targets:                         # 目标物理范围（岩石物理常识；范围外视为脏值，不参与训练；依据见 README 第 9 节）
   por_range: [0.0, 50.0]         # POR：%
   perm_range: [0.0001, 10000.0]  # PERM：mD
   sw_range: [0.0, 100.0]         # SW：%
   perm_log_floor: 0.0001         # PERM 取 log10 前的下限裁剪
 
-predict_clamp:                   # 预测值物理裁剪（与目标同单位）
+predict_clamp:                   # 预测值物理裁剪（物理常识界限，初版设定；与目标同单位；依据见 README 第 9 节）
   por_upper: 40.0                # POR 上限（%）
   sw_upper: 100.0                # SW 上限（%）
   perm_lower: 0.0001             # PERM 下限（mD）

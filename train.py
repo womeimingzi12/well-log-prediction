@@ -8,9 +8,9 @@
     python train.py --fast --max_wells 8           # 小规模冒烟测试（验证流程用）
 
 训练产物：
-    models/model.pkl   三个目标（POR / log10(PERM) / SW）的 LightGBM 模型
+    models/model.pkl   每个目标的"地板分类器 + 储层回归器"两段式模型
     models/scaler.pkl  特征插补 + 标准化管线
-    cv_report.json     交叉验证报告（本地赛题指标，用于评估效果）
+    cv_report.json     交叉验证报告（两段式赛题指标 + 阈值，用于评估效果）
 """
 from __future__ import annotations
 
@@ -26,13 +26,31 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from sklearn.model_selection import GroupKFold
 
-from src.feature import TARGETS, build_features
-from src.model import LogParamModel, make_lgb_params, make_scaler, train_booster
+from src.feature import FLOOR, TARGETS, build_features
+from src.model import (LogParamModel, make_lgb_clf_params, make_lgb_params,
+                       make_scaler, train_booster)
 from src.utils import (acc_perm, acc_por, acc_sw, clean_sentinels,
                        discover_well_files, load_config, read_well_file,
                        set_seed, total_score)
 
 METRIC = {"POR": acc_por, "PERM": acc_perm, "SW": acc_sw}
+
+
+def acc_perm_log(y_log, pred_log) -> float:
+    """PERM 赛题准确率（log10 空间直接计算，与 acc_perm(10^y, 10^p) 等价）。"""
+    y_log = np.asarray(y_log, dtype=float)
+    pred_log = np.asarray(pred_log, dtype=float)
+    return float(np.mean(np.maximum(0.0, 1.0 - np.abs(pred_log - y_log))))
+
+
+FEVAL = {"POR": acc_por, "PERM": acc_perm_log, "SW": acc_sw}
+
+
+def make_feval(metric_fn):
+    """包装赛题指标为 LightGBM feval（折内早停用；标签与预测同空间）。"""
+    def feval(preds, eval_data):
+        return "comp_metric", float(metric_fn(eval_data.get_label(), preds)), True
+    return feval
 
 
 def parse_args():
@@ -138,9 +156,15 @@ def main():
     es_rounds = int(cfg["model"]["early_stopping_rounds"])
     n_folds = int(args.n_folds or cfg["train"]["n_folds"])
 
-    # ---- 按井分组 K 折交叉验证（早停 + 赛题指标）----
-    oof = {t: np.full(n_rows, np.nan) for t in TARGETS}
-    best_iters = {t: [] for t in TARGETS}
+    # ---- 地板（非储层声明值）标签掩码 ----
+    floor_mask = {t: (y_raw[t] == FLOOR[t]) for t in TARGETS}
+    clf_params = make_lgb_clf_params(cfg["model"].get("lgb_params"), seed,
+                                     int(cfg["model"]["num_threads"]))
+
+    # ---- 按井分组 K 折交叉验证：每目标 = 地板分类器 + 储层回归器 ----
+    oof_clf = {t: np.full(n_rows, np.nan) for t in TARGETS}   # 地板概率（折外）
+    oof_reg = {t: np.full(n_rows, np.nan) for t in TARGETS}   # 回归预测（折外；PERM 为 log10）
+    best_iters = {t: {"clf": [], "reg": []} for t in TARGETS}
     gkf = GroupKFold(n_splits=n_folds)
     for fold, (tr_idx, va_idx) in enumerate(gkf.split(X_all, groups=groups)):
         scaler = make_scaler().fit(X_all.iloc[tr_idx].to_numpy(dtype="float32"))
@@ -149,38 +173,65 @@ def main():
         for t in TARGETS:
             m_tr = ~np.isnan(y_log[t][tr_idx])
             m_va = ~np.isnan(y_log[t][va_idx])
-            booster, best_it = train_booster(
-                Xtr[m_tr], y_log[t][tr_idx][m_tr], params,
-                X_val=Xva[m_va], y_val=y_log[t][va_idx][m_va],
+            fl_tr = floor_mask[t][tr_idx][m_tr]
+            fl_va = floor_mask[t][va_idx][m_va]
+            # 地板分类器：全部有效点，标签 = 是否地板（早停按 AUC）
+            clf, clf_it = train_booster(
+                Xtr[m_tr], fl_tr.astype(float), clf_params,
+                X_val=Xva[m_va], y_val=fl_va.astype(float),
                 num_boost_round=n_rounds, early_stopping_rounds=es_rounds,
                 feature_names=feature_cols)
-            oof[t][va_idx[m_va]] = booster.predict(Xva[m_va], num_iteration=best_it)
-            best_iters[t].append(best_it)
+            oof_clf[t][va_idx[m_va]] = clf.predict(Xva[m_va], num_iteration=clf_it)
+            best_iters[t]["clf"].append(clf_it)
+            # 储层回归器：仅非地板点，早停按赛题指标（feval）
+            r_tr, r_va = ~fl_tr, ~fl_va
+            reg, reg_it = train_booster(
+                Xtr[m_tr][r_tr], y_log[t][tr_idx][m_tr][r_tr], params,
+                X_val=Xva[m_va][r_va], y_val=y_log[t][va_idx][m_va][r_va],
+                num_boost_round=n_rounds, early_stopping_rounds=es_rounds,
+                feature_names=feature_cols, feval=make_feval(FEVAL[t]))
+            oof_reg[t][va_idx[m_va]] = reg.predict(Xva[m_va], num_iteration=reg_it)
+            best_iters[t]["reg"].append(reg_it)
         print(f"[CV] fold {fold + 1}/{n_folds} 完成")
 
-    # ---- 本地赛题指标（折外预测）----
-    accs = {}
+    # ---- 阈值扫描（仅训练集折外数据）：每个目标最大化自身赛题指标 ----
+    thresholds, accs, reg_only_accs = {}, {}, {}
     for t in TARGETS:
-        m = ~np.isnan(oof[t])
-        y_true_t = y_raw[t][m]
-        pred_t = oof[t][m] if t != "PERM" else np.power(10.0, oof[t][m])
-        accs[t] = METRIC[t](y_true_t, pred_t)
+        m = ~np.isnan(oof_clf[t]) & ~np.isnan(y_raw[t])
+        yt = y_raw[t][m]
+        prob, regp = oof_clf[t][m], oof_reg[t][m]
+        reg_units = np.power(10.0, regp) if t == "PERM" else regp
+        best_acc, best_th = -1.0, 1.0
+        for th in np.arange(0.05, 1.001, 0.05):
+            pred = np.where(prob >= th, FLOOR[t], reg_units)
+            a = METRIC[t](yt, pred)
+            if a > best_acc:
+                best_acc, best_th = a, float(th)
+        thresholds[t], accs[t] = round(best_th, 2), best_acc
+        reg_only_accs[t] = METRIC[t](yt, reg_units)
     score = total_score(accs["POR"], accs["PERM"], accs["SW"])
-    print(f"[CV] AccPOR={accs['POR']:.4f}  AccPERM={accs['PERM']:.4f}  "
-          f"AccSW={accs['SW']:.4f}  Total={score:.2f}")
+    print(f"[CV] 两段式 AccPOR={accs['POR']:.4f}  AccPERM={accs['PERM']:.4f}  "
+          f"AccSW={accs['SW']:.4f}  Total={score:.2f}  阈值={thresholds}")
+    print(f"[CV] 仅回归器对照 AccPOR={reg_only_accs['POR']:.4f}  "
+          f"AccPERM={reg_only_accs['PERM']:.4f}  AccSW={reg_only_accs['SW']:.4f}")
 
     # ---- 全量重训（轮数取各目标 CV 最优轮数中位数，固定轮数保证确定性）----
     final_scaler = make_scaler().fit(X_all.to_numpy(dtype="float32"))
     X_full = final_scaler.transform(X_all.to_numpy(dtype="float32"))
-    boosters = {}
+    target_models = {}
     for t in TARGETS:
-        rounds_t = int(np.median(best_iters[t]))
         m = ~np.isnan(y_log[t])
-        booster, _ = train_booster(X_full[m], y_log[t][m], params,
-                                   num_boost_round=rounds_t,
-                                   feature_names=feature_cols)
-        boosters[t] = booster
-        print(f"[最终模型] {t}: 轮数={rounds_t}")
+        fl = floor_mask[t]
+        clf_rounds = int(np.median(best_iters[t]["clf"]))
+        reg_rounds = int(np.median(best_iters[t]["reg"]))
+        clf, _ = train_booster(X_full[m], fl[m].astype(float), clf_params,
+                               num_boost_round=clf_rounds, feature_names=feature_cols)
+        r = m & ~fl
+        reg, _ = train_booster(X_full[r], y_log[t][r], params,
+                               num_boost_round=reg_rounds, feature_names=feature_cols)
+        target_models[t] = {"clf": clf, "reg": reg, "threshold": thresholds[t]}
+        print(f"[最终模型] {t}: 分类器轮数={clf_rounds}  回归器轮数={reg_rounds}  "
+              f"阈值={thresholds[t]}")
 
     meta = {
         "seed": seed,
@@ -188,12 +239,17 @@ def main():
         "n_wells": len(well_ids),
         "n_rows": n_rows,
         "n_features": len(feature_cols),
-        "best_iterations": {t: int(np.median(best_iters[t])) for t in TARGETS},
+        "label_floor": FLOOR,
+        "thresholds": thresholds,
+        "best_iterations": {t: {"clf": int(np.median(best_iters[t]["clf"])),
+                                "reg": int(np.median(best_iters[t]["reg"]))}
+                            for t in TARGETS},
         "cv_accuracy": accs,
+        "cv_accuracy_regressor_only": reg_only_accs,
         "cv_total_score": score,
         "perm_log_floor": eps_floor,
     }
-    model = LogParamModel(feature_cols=feature_cols, boosters=boosters,
+    model = LogParamModel(feature_cols=feature_cols, models=target_models,
                           scaler=final_scaler, meta=meta)
     model.save(os.path.join(args.models_dir, "model.pkl"),
                os.path.join(args.models_dir, "scaler.pkl"))
@@ -201,6 +257,8 @@ def main():
 
     with open(args.cv_report, "w", encoding="utf-8") as f:
         json.dump({"cv_accuracy": accs, "cv_total_score": score,
+                   "cv_accuracy_regressor_only": reg_only_accs,
+                   "thresholds": thresholds,
                    "best_iterations": meta["best_iterations"],
                    "n_wells": len(well_ids), "n_rows": n_rows,
                    "n_features": len(feature_cols)},
