@@ -32,7 +32,7 @@
 
 ## 3. 运行环境
 
-- Python 3.10+（开发验证环境：Python 3.13.12，Windows x64）
+- Python 3.14（开发与验证环境：Python 3.14.3，Windows x64；为保持一致的结果，建议以相同环境复现）
 - CPU 即可，无需 GPU；内存建议 ≥ 8 GB
 - 全部依赖及对应版本见 `requirements.txt`（已锁定版本），安装：
 
@@ -99,25 +99,25 @@ submission_code/
 ## 7. 结果 JSON 格式说明（重要）
 
 提交格式为
-> 以下为模型输出的 JSON 结构，`resultData` 包含一口井的预测结果，
+> 以下为模型输出的 JSON 结构（webpage 口径，默认输出），`resultData` 包含一口井的预测结果，
 > `predictions` 中每个对象代表一个深度点的预测值。
 ```
 {
   "resultData": [
     {
-      "logId": "39dc13c9ca1e4f0eb5f9cb311fe564c3",
+      "igoId": "39dc13c9ca1e4f0eb5f9cb311fe564c3",
       "predictions": [
         {
           "DEPTH": 505.0,
           "POR": 0.1,
           "PERM": 12.35,
-          "SW": 0.426
+          "SW": 99.9
         },
         {
           "DEPTH": 505.1,
           "POR": 0.102,
           "PERM": 13.02,
-          "SW": 0.431
+          "SW": 98.7
         }
       ]
     }
