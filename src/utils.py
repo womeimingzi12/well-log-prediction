@@ -27,16 +27,16 @@ def load_config(path: str) -> dict:
 def discover_well_files(data_dir: str):
     """递归发现目录下全部 .txt 井文件。
 
-    返回 [(igoId, path), ...]，igoId 为文件名（不含扩展名），
-    与 result.json 中的 igoId 一一对应；结果按 igoId 排序保证确定性。
+    返回 [(logId, path), ...]，logId 为文件名（不含扩展名），
+    与 result.json 中的 logId 一一对应；结果按 logId 排序保证确定性。
     """
     items = []
     for root, _dirs, files in os.walk(data_dir):
         for fn in files:
             if fn.lower().endswith(".txt"):
                 path = os.path.join(root, fn)
-                igo_id = os.path.splitext(fn)[0]
-                items.append((igo_id, path))
+                log_id = os.path.splitext(fn)[0]
+                items.append((log_id, path))
     items.sort(key=lambda x: x[0])
     return items
 

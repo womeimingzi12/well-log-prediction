@@ -69,7 +69,7 @@ python train.py --data_dir ./data/train
 ## 5. 文件说明
 
 ```
-submission_code/
+submission_code.zip
 ├── README.md            # 本文件：算法说明、运行方式、依赖环境
 ├── predict.py           # 主预测脚本（评测复现入口）
 ├── train.py             # 训练脚本（生成模型权重与交叉验证报告）
@@ -84,7 +84,7 @@ submission_code/
 │   └── scaler.pkl       # 特征插补 + 标准化管线（训练后生成）
 ├── cv_report.json       # 交叉验证报告（train.py 生成，参数选择记录，供复现核查）
 └── examples/
-     └──result_example.json          # 结果格式样例（webpage 口径：igoId/DEPTH）
+     └──result_example.json          # 结果格式样例（提交规范口径：logId/DEPTH）
     
 ```
 
@@ -98,38 +98,33 @@ submission_code/
 
 ## 7. 结果 JSON 格式说明（重要）
 
-提交格式为
-> 以下为模型输出的 JSON 结构（webpage 口径，默认输出），`resultData` 包含一口井的预测结果，
-> `predictions` 中每个对象代表一个深度点的预测值。
+严格按照赛题《提交规范》输出预测文件 `result.json`（结构固定，**禁止增删、修改任何字段**），打包为 `result.zip` 上传评测：
+
 ```
 {
   "resultData": [
     {
-      "igoId": "39dc13c9ca1e4f0eb5f9cb311fe564c3",
+      "logId": "39dc13c9ca1e4f0eb5f9cb311fe564c3",
       "predictions": [
         {
           "DEPTH": 505.0,
           "POR": 0.1,
-          "PERM": 12.35,
+          "PERM": 0.01,
           "SW": 99.9
         },
         {
           "DEPTH": 505.1,
-          "POR": 0.102,
+          "POR": 10.24,
           "PERM": 13.02,
-          "SW": 98.7
+          "SW": 42.6
         }
       ]
     }
   ]
 }
 ```
-| 口径 | 顶层字段 | 井次键 | 深度键 |
-|---|---|---|---|
-| `webpage`（默认，跟随网页提交规范） | resultData | `igoId` | `DEPTH` |
-| `official`（数据包官方文件示例） | modelId / modelName / version / resultData | `logId` | `depth` |
 
-`igoId` / `logId` 取井文件名（不含 .txt 扩展名）。默认输出格式为 `webpage`，无需额外配置。
+`logId` 取井文件名（不含 .txt 扩展名）；`resultData` 包含一口井的预测结果，`predictions` 中每个对象为一个深度点；数值单位与训练标签一致：`POR`（%）、`PERM`（mD）、`SW`（%）。`predict.py` 按此结构直接输出，无需任何格式配置。
 
 ## 8. 训练与提交流程
 
@@ -138,7 +133,7 @@ submission_code/
 3. 训练：`python train.py`（默认 5 折 CV + 全量重训，CPU 约几十分钟）；
 4. 查看本地指标：`cv_report.json` 中的 `cv_total_score`（综合百分制，可对照晋级线自评）；
 5. 预测：`python predict.py --data_dir ./data --output ./result.json`，将 result.json 打包为 `result.zip` 上传；
-6. 代码包提交：将整个目录打包为 `submission_code.zip`，**务必包含训练生成的 `models/model.pkl`、`models/scaler.pkl` 与 `cv_report.json`**（.gitignore 忽略这些文件，打包前请确认均已生成并在目录中；cv_report.json 为参数选择与验证记录，供复现核查）。
+6. 代码包提交：按赛题提交规范的结构将下列文件直接打包为 `submission_code.zip`（解压后即为文件根目录），**务必包含训练生成的 `models/model.pkl`、`models/scaler.pkl` 与 `cv_report.json`**（.gitignore 忽略这些文件，打包前请确认均已生成并在目录中；cv_report.json 为参数选择与验证记录，供复现核查）。
 
 ## 9. 关键阈值、参数与判定规则的确定说明（复现核查用）
 
@@ -163,7 +158,7 @@ submission_code/
 | 地板值定义 | POR=0.1 / PERM=0.01 / SW=99.9 | 训练标签中占比约 68% 的"非储层声明值"（三目标共现率 ≥98.5%），由训练标签统计确定；两段式分类器的标签即由此定义 |
 | 两段式分类阈值 | 见 `cv_report.json` 的 `thresholds` 字段 | 仅用训练井 5 折折外（OOF）预测在 0.05–1.00 间扫描，取各目标赛题指标最大化的阈值；不接触测试集 |
 | 随机种子 / 线程数 | seed=2026，num_threads=4 | 按赛题复现要求固定；不参与精度选择 |
-| 输出格式 `result.format` | webpage（igoId / DEPTH） | 按赛题网页提交规范设定 |
+| 输出格式 | 赛题《提交规范》固定结构：resultData / logId / predictions / DEPTH（字段禁止增删） | 按赛题提交规范固定；`predict.py` 直接输出，无格式可配项 |
 
 ### 9.3 防泄漏与跨样本合规设计
 
@@ -173,7 +168,7 @@ submission_code/
 - **预处理管线仅在训练集拟合**：特征插补 + 标准化管线（`models/scaler.pkl`）只在训练井上拟合，推理阶段仅执行 transform；
 - **两段式分类阈值仅由训练集确定**：地板覆盖阈值仅用训练井折外（OOF）预测扫描得到，确定过程与结果记录在 `cv_report.json`，不涉及任何测试数据；
 - **无预置结果**：不存在预置预测结果、缓存或查表逻辑；每次运行均基于当前输入从原始井文件完整计算；
-- **标识信息仅作输出键**：井文件名（`igoId`）仅用于结果 JSON 的井次键，不用于检索、匹配或恢复任何隐藏信息；
+- **标识信息仅作输出键**：井文件名（`logId`）仅用于结果 JSON 的井次键，不用于检索、匹配或恢复任何隐藏信息；
 - **无答案探测逻辑**：代码中不存在基于评测反馈的比对、探测或对特定样本定向修改预测的逻辑。
 
 ### 9.4 记录留存

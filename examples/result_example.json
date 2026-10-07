@@ -1,19 +1,19 @@
 {
   "resultData": [
     {
-      "igoId": "39dc13c9ca1e4f0eb5f9cb311fe564c3",
+      "logId": "39dc13c9ca1e4f0eb5f9cb311fe564c3",
       "predictions": [
         {
           "DEPTH": 505.0,
           "POR": 0.1,
-          "PERM": 12.35,
+          "PERM": 0.01,
           "SW": 99.9
         },
         {
           "DEPTH": 505.1,
-          "POR": 0.102,
+          "POR": 10.24,
           "PERM": 13.02,
-          "SW": 98.7
+          "SW": 42.6
         }
       ]
     }
